@@ -41,10 +41,6 @@
 #include "hwc_debugger.h"
 #include "blit_engine_c2d.h"
 
-#ifdef QTI_BSP
-#include <exhwcomposer_defs.h>
-#endif
-
 #define __CLASS__ "HWCDisplay"
 
 #if 0
