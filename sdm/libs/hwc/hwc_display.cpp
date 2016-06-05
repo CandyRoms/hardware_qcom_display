@@ -245,11 +245,6 @@ int HWCDisplay::GetDisplayAttributes(uint32_t config, const uint32_t *attributes
     case HWC_DISPLAY_DPI_Y:
       values[i] = INT32(variable_config.y_dpi * 1000.0f);
       break;
-#if 0
-    case HWC_DISPLAY_SECURE:
-      values[i] = INT32(true);  // For backward compatibility. All Physical displays are secure
-      break;
-#endif
     default:
       DLOGW("Spurious attribute type = %d", attributes[i]);
       return -EINVAL;
@@ -794,8 +789,15 @@ int HWCDisplay::PostCommitLayerStack(hwc_display_contents_1_t *content_list) {
 bool HWCDisplay::NeedsFrameBufferRefresh(hwc_display_contents_1_t *content_list) {
   uint32_t layer_count = layer_stack_.layer_count;
 
+  // Handle ongoing animation and end here, start is handled below
   if (layer_stack_cache_.animating) {
-      return false;
+      if (!layer_stack_.flags.animating) {
+        // Animation is ending.
+        return true;
+      } else {
+        // Animation is going on.
+        return false;
+      }
   }
 
   // Frame buffer needs to be refreshed for the following reasons:
@@ -843,7 +845,7 @@ bool HWCDisplay::IsLayerUpdating(const hwc_layer_1_t &hwc_layer, const LayerCach
 void HWCDisplay::CacheLayerStackInfo(hwc_display_contents_1_t *content_list) {
   uint32_t layer_count = layer_stack_.layer_count;
 
-  if (layer_count > kMaxLayerCount) {
+  if (layer_count > kMaxLayerCount || layer_stack_.flags.animating) {
     ResetLayerCacheStack();
     return;
   }
@@ -955,6 +957,7 @@ LayerBufferFormat HWCDisplay::GetSDMFormat(const int32_t &source, const int flag
   case HAL_PIXEL_FORMAT_BGR_565:                  format = kFormatBGR565;                   break;
   case HAL_PIXEL_FORMAT_NV12_ENCODEABLE:
   case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:       format = kFormatYCbCr420SemiPlanarVenus;  break;
+  case HAL_PIXEL_FORMAT_YCrCb_420_SP_VENUS:       format = kFormatYCrCb420SemiPlanarVenus;  break;
   case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS_UBWC:  format = kFormatYCbCr420SPVenusUbwc;      break;
   case HAL_PIXEL_FORMAT_YV12:                     format = kFormatYCrCb420PlanarStride16;   break;
   case HAL_PIXEL_FORMAT_YCrCb_420_SP:             format = kFormatYCrCb420SemiPlanar;       break;
@@ -1067,6 +1070,8 @@ const char *HWCDisplay::GetHALPixelFormatString(int format) {
     return "INTERLACE";
   case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:
     return "YCbCr_420_SP_VENUS";
+  case HAL_PIXEL_FORMAT_YCrCb_420_SP_VENUS:
+    return "YCrCb_420_SP_VENUS";
   case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS_UBWC:
     return "YCbCr_420_SP_VENUS_UBWC";
   default:
@@ -1194,6 +1199,7 @@ void HWCDisplay::GetPanelResolution(uint32_t *x_pixels, uint32_t *y_pixels) {
 
 int HWCDisplay::SetDisplayStatus(uint32_t display_status) {
   int status = 0;
+  const hwc_procs_t *hwc_procs = *hwc_procs_;
 
   switch (display_status) {
   case kDisplayStatusResume:
@@ -1209,6 +1215,11 @@ int HWCDisplay::SetDisplayStatus(uint32_t display_status) {
   default:
     DLOGW("Invalid display status %d", display_status);
     return -EINVAL;
+  }
+
+  if (display_status == kDisplayStatusResume ||
+      display_status == kDisplayStatusPause) {
+    hwc_procs->invalidate(hwc_procs);
   }
 
   return status;
@@ -1248,15 +1259,6 @@ void HWCDisplay::MarkLayersForGPUBypass(hwc_display_contents_1_t *content_list) 
   for (size_t i = 0 ; i < (content_list->numHwLayers - 1); i++) {
     hwc_layer_1_t *layer = &content_list->hwLayers[i];
     layer->compositionType = HWC_OVERLAY;
-  }
-}
-
-void HWCDisplay::CloseAcquireFences(hwc_display_contents_1_t *content_list) {
-  for (size_t i = 0; i < content_list->numHwLayers; i++) {
-    if (content_list->hwLayers[i].acquireFenceFd >= 0) {
-      close(content_list->hwLayers[i].acquireFenceFd);
-      content_list->hwLayers[i].acquireFenceFd = -1;
-    }
   }
 }
 
@@ -1368,7 +1370,9 @@ int HWCDisplay::GetPanelBrightness(int *level) {
 }
 
 int HWCDisplay::ToggleScreenUpdates(bool enable) {
+  const hwc_procs_t *hwc_procs = *hwc_procs_;
   display_paused_ = enable ? false : true;
+  hwc_procs->invalidate(hwc_procs);
   return 0;
 }
 
