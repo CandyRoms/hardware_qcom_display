@@ -59,3 +59,9 @@ ifeq ($(call is-vendor-board-platform,QCOM),true)
     common_deps += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
     kernel_includes += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 endif
+
+# Executed only for special Doze configurations
+ifeq ($(TARGET_USES_ALT_DOZE),true)
+# Treat Doze as normal unblank
+    common_flags += -DALT_DOZE
+endif

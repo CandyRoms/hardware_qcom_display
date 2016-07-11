@@ -428,10 +428,14 @@ static int hwc_setPowerMode(struct hwc_composer_device_1* dev, int dpy,
             value = FB_BLANK_POWERDOWN;
             break;
         case HWC_POWER_MODE_DOZE:
+#ifdef ALT_DOZE
+            // Special use-case treating doze as normal unblank
+#else
             // FB_BLANK_NORMAL is being used here to map to doze mode
             // This definition is specific to our fbdev implementation
             value = FB_BLANK_NORMAL;
             break;
+#endif
         case HWC_POWER_MODE_DOZE_SUSPEND:
             // FB_BLANK_VSYNC_SUSPEND is being used here to map to doze_suspend
             // This definition is specific to our fbdev implementation
