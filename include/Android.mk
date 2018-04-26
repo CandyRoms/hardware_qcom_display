@@ -23,4 +23,5 @@ ifeq ($(TARGET_USES_GRALLOC1), true)
 else
     LOCAL_EXPORT_C_INCLUDE_DIRS += $(display_top)/libgralloc
 endif
+LOCAL_VENDOR_MODULE := true
 include $(BUILD_HEADER_LIBRARY)
